@@ -222,18 +222,6 @@ export default function App() {
   // Mobile menu sidebar toggle state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // App Auth
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register" | "admin">("login");
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
-  const [regName, setRegName] = useState("");
-  const [regWa, setRegWa] = useState("");
-  const [loginToken, setLoginToken] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
-  const [adminUsers, setAdminUsers] = useState<any[]>([]);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
-
   // App active view
   const [activeMenu, setActiveMenu] = useState("beranda");
 
@@ -559,6 +547,15 @@ export default function App() {
     showToast("Isian spesifikasi dokumen berhasil dibersihkan.", false);
   };
 
+  const safeParseJson = async (response: Response) => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new Error(`Koneksi/Respon Server Bermasalah (${response.status}): ${text.slice(0, 150) || "Respon kosong"}...`);
+    }
+  };
+
   const handleSuggestElemenCp = async () => {
     if (!specificData.mapel) {
       showToast("Harap isi Nama Mata Pelajaran terlebih dahulu.", true);
@@ -578,7 +575,7 @@ export default function App() {
           geminiApiKey: settings.geminiApiKey
         })
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       if (!response.ok) throw new Error(data.error || "Gagal menghasilkan sugesti elemen CP");
       
       setSpecificData(prev => ({ ...prev, elemenCp: data.elemenCp }));
@@ -609,7 +606,7 @@ export default function App() {
           geminiApiKey: settings.geminiApiKey
         })
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       if (!response.ok) throw new Error(data.error || "Gagal menghasilkan sugesti materi pokok");
       
       setSpecificData(prev => ({ ...prev, materiPokok: data.materiPokok }));
@@ -638,7 +635,7 @@ export default function App() {
           modelName: settings.aiModel || "gemini-3.5-flash"
         })
       });
-      const data = await response.json();
+      const data = await safeParseJson(response);
       if (!response.ok) {
         throw new Error(data.error || "Gagal memverifikasi API Key.");
       }
@@ -697,12 +694,11 @@ export default function App() {
         }),
       });
 
+      const resData = await safeParseJson(response);
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Gagal berkomunikasi dengan server administrasi.");
+        throw new Error(resData.error || "Gagal berkomunikasi dengan server administrasi.");
       }
 
-      const resData = await response.json();
       setEditorHtml(resData.html);
 
       // Construct nice title
@@ -953,513 +949,11 @@ export default function App() {
     showToast("Dokumen riwayat terhapus.", false);
   };
 
-  // --- Firebase Auth & DB Logic ---
 
-  useEffect(() => {
-    setIsLoadingAuth(true);
-    const token = storage.get("guru_token");
-    if (token) {
-      // Basic automatic login if we have token
-      // In production verify against DB, to keep simple we just trust the local state here
-      // But we should verify. For now, try fetching if it's valid
-      const checkToken = async () => {
-        if (token === "ADMIN_BYPASS") {
-          setIsLoggedIn(true);
-          setIsLoadingAuth(false);
-          return;
-        }
-        try {
-          const q = query(collection(db, "users"), where("token", "==", token), where("status", "==", "approved"));
-          const snap = await getDocs(q);
-          if (!snap.empty) {
-            setIsLoggedIn(true);
-          } else {
-            storage.set("guru_token", "");
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setIsLoadingAuth(false);
-        }
-      };
-      checkToken();
-    } else {
-      setIsLoadingAuth(false);
-    }
-  }, []);
 
-  const handleRegister = async () => {
-    if (!regName || !regWa) {
-      showToast("Harap lengkapi Nama & Nomor WhatsApp", true);
-      return;
-    }
-    // Set to pending
-    try {
-      await addDoc(collection(db, "users"), {
-        name: regName,
-        phone: regWa,
-        status: "pending",
-        token: ""
-      });
-      showToast("Pendaftaran berhasil! Hubungi admin untuk aktivasi.", false);
-      setAuthMode("login");
-      setRegName("");
-      setRegWa("");
-    } catch (e) {
-      showToast("Gagal mendaftar, coba lagi.", true);
-    }
-  };
 
-  const handleLogin = async () => {
-    if (!loginToken) {
-      showToast("Token wajib diisi", true);
-      return;
-    }
-    try {
-      const q = query(collection(db, "users"), where("token", "==", loginToken), where("status", "==", "approved"));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        setIsLoggedIn(true);
-        storage.set("guru_token", loginToken);
-        showToast("Login Berhasil!", false);
-      } else {
-        showToast("Token tidak valid / belum disetujui", true);
-      }
-    } catch (e) {
-      showToast("Gagal memeriksa token", true);
-    }
-  };
 
-  const checkAdmin = () => {
-    if (adminPassword === "admin123") {
-      setIsAdminUnlocked(true);
-      fetchAdminUsers();
-    } else {
-      showToast("Sandi admin salah", true);
-    }
-  };
 
-  const fetchAdminUsers = () => {
-    onSnapshot(collection(db, "users"), (snap) => {
-      let u: any = [];
-      snap.forEach(doc => u.push({ id: doc.id, ...doc.data() }));
-      setAdminUsers(u);
-    });
-  };
-
-  const approveUser = async (id: string) => {
-    const newToken = Math.random().toString(36).substring(2, 8).toUpperCase();
-    await updateDoc(doc(db, "users", id), {
-      status: "approved",
-      token: newToken
-    });
-    showToast("User disetujui, token digenerate.", false);
-  };
-
-  if (isLoadingAuth) {
-    return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 text-slate-500">
-        <Sparkles className="w-8 h-8 text-blue-500 animate-pulse mb-4" />
-        <p className="font-semibold text-sm">Memeriksa Sesi...</p>
-      </div>
-    );
-  }
-
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 flex items-center justify-center p-4 md:p-8 relative overflow-hidden font-sans">
-        {/* Animated background highlights to make it look premium */}
-        <div className="absolute top-[-20%] left-[-20%] w-[50rem] h-[50rem] rounded-full bg-blue-500/10 blur-[130px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[45rem] h-[45rem] rounded-full bg-indigo-500/10 blur-[130px] pointer-events-none" />
-        
-        {/* Elegant grid alignment lines */}
-        <div className="absolute inset-0 bg-[radial-gradient(#ffffff03_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
-
-        {/* Toast Notification */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -50, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className={`fixed top-6 right-6 z-[60] text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border ${
-                toast.isError
-                  ? "bg-red-600 border-red-500/50"
-                  : "bg-slate-900 border-slate-800/80"
-              }`}
-            >
-              {toast.isError ? (
-                <AlertTriangle className="text-red-300 w-5 h-5 shrink-0" />
-              ) : (
-                <CheckCircle2 className="text-emerald-400 w-5 h-5 shrink-0" />
-              )}
-              <span className="font-semibold text-sm">{toast.text}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Admin Secret Portal Trigger */}
-        <button 
-          onClick={() => setAuthMode('admin')} 
-          className="absolute bottom-4 right-4 text-slate-700 hover:text-slate-400 transition-colors p-2 rounded-lg"
-          title="Admin Portal"
-        >
-          <Compass className="w-5 h-5 animate-spin-slow" />
-        </button>
-
-        {/* Outer Premium Card container */}
-        <div className="w-full max-w-4xl bg-slate-900/60 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[580px] relative z-10">
-          
-          {/* LEFT PANEL: App Brand & Feature Timeline (Modern & Informative) */}
-          <div className="md:col-span-5 bg-gradient-to-b from-blue-700 via-indigo-800 to-indigo-950 text-white p-8 md:p-10 flex flex-col justify-between relative overflow-hidden border-r border-slate-800/30">
-            {/* Visual background noise */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.06),transparent)] pointer-events-none" />
-            <div className="absolute top-0 right-0 w-44 h-44 bg-white/5 rounded-full blur-3xl pointer-events-none" />
-
-            {/* 1. Header Brand details */}
-            <div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="bg-white/10 p-3 rounded-2xl text-white shadow-inner backdrop-blur-md border border-white/20">
-                  <FileText className="w-6 h-6 text-blue-200" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-black tracking-tight leading-none bg-gradient-to-r from-white via-blue-100 to-indigo-100 bg-clip-text text-transparent">AdminGuru.AI</h1>
-                  <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest mt-0.5 block">Premium Suite</span>
-                </div>
-              </div>
-
-              <h2 className="text-lg font-bold text-white/95 leading-snug mt-4">
-                Asisten AI Terbaik untuk Administrasi Guru
-              </h2>
-              <p className="text-xs text-blue-100/70 mt-2 leading-relaxed">
-                Rancang Analisis CP, TP, ATP, Modul Ajar, hingga Butir Soal Asesmen secara otomatis & instan sesuai standar nasional terbaru.
-              </p>
-            </div>
-
-            {/* 2. Visual Guide Timeline */}
-            <div className="my-8 space-y-5 relative">
-              <div className="absolute left-4.5 top-2 bottom-2 w-0.5 bg-white/10" />
-              
-              <div className="flex gap-4 relative z-10">
-                <div className="w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-xs font-bold shrink-0 text-blue-200 backdrop-blur-sm">
-                  1
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-white">Daftar Akun Baru</h3>
-                  <p className="text-[10.5px] text-blue-200/70 mt-0.5 leading-snug">Input nama lengkap + gelar akademik dan No. WhatsApp aktif Anda.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 relative z-10">
-                <div className="w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-xs font-bold shrink-0 text-blue-200 backdrop-blur-sm">
-                  2
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-white">Aktivasi oleh Admin</h3>
-                  <p className="text-[10.5px] text-blue-200/70 mt-0.5 leading-snug">Admin meninjau pendaftaran dan menghasilkan token aktivasi khusus.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 relative z-10">
-                <div className="w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-xs font-bold shrink-0 text-blue-200 backdrop-blur-sm">
-                  3
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-white">Terima Token & Login</h3>
-                  <p className="text-[10.5px] text-blue-200/70 mt-0.5 leading-snug">Gunakan token unik yang digenerate setelah pendaftaran Anda disetujui.</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Footer info */}
-            <div className="pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-blue-200/60 font-medium">
-              <span>Kurikulum Merdeka 2025/2026</span>
-              <Sparkles className="w-3.5 h-3.5 text-blue-300 animate-pulse" />
-            </div>
-          </div>
-
-          {/* RIGHT PANEL: Authentication Forms */}
-          <div className="md:col-span-7 p-8 md:p-10 flex flex-col justify-between bg-slate-950/40 relative">
-            
-            {/* Navigational Tabs (Hidden inside admin view) */}
-            {authMode !== "admin" ? (
-              <div className="flex bg-slate-900/80 p-1.5 rounded-2xl mb-8 border border-slate-800/80 shadow-md">
-                <button
-                  onClick={() => setAuthMode("login")}
-                  className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all ${
-                    authMode === "login"
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  Masuk dengan Token
-                </button>
-                <button
-                  onClick={() => setAuthMode("register")}
-                  className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all ${
-                    authMode === "register"
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  Pendaftaran Baru
-                </button>
-              </div>
-            ) : (
-              <div className="mb-6 flex items-center gap-2">
-                <div className="bg-amber-500/10 p-2 rounded-xl border border-amber-500/20 text-amber-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-widest">Admin Authorization</h3>
-              </div>
-            )}
-
-            {/* Dynamic Content Frame */}
-            <div className="flex-1 flex flex-col justify-center">
-              {authMode === "login" && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 15 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  className="space-y-5"
-                >
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-bold text-slate-100">Selamat Datang Kembali</h2>
-                    <p className="text-xs text-slate-400">Silakan masukkan token akses rahasia Anda untuk membuka workspace.</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Token Akses 6-Digit</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                        <Key className="w-4.5 h-4.5" />
-                      </div>
-                      <input
-                        type="text"
-                        value={loginToken}
-                        maxLength={6}
-                        onChange={(e) => setLoginToken(e.target.value.toUpperCase())}
-                        placeholder="CONTOH: X7H2K9"
-                        className="w-full text-center tracking-widest text-lg font-mono pl-11 pr-4 py-4 border border-slate-800 rounded-2xl bg-slate-900/60 outline-none focus:border-blue-500 focus:bg-slate-900 focus:ring-4 focus:ring-blue-500/10 text-slate-200 transition-all placeholder:text-slate-600"
-                      />
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
-                      * Token ini didapatkan setelah pendaftaran Anda disetujui secara tertulis oleh Admin.
-                    </p>
-                  </div>
-
-                  <button 
-                    onClick={handleLogin}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold py-4 px-6 rounded-2xl shadow-lg shadow-blue-600/20 hover:shadow-blue-500/30 active:scale-95 transition-all text-xs border border-blue-500/30"
-                  >
-                    Masuk ke Workspace Kreatif
-                  </button>
-                </motion.div>
-              )}
-
-              {authMode === "register" && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 15 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  className="space-y-4"
-                >
-                  <div className="space-y-1">
-                    <h2 className="text-lg font-bold text-slate-100">Buat Akun Perangkat Ajar</h2>
-                    <p className="text-xs text-slate-400 font-medium">Data di bawah digunakan untuk mematangkan profil perangkat ajar Anda.</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Nama Lengkap & Gelar Akademik</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <User className="w-4.5 h-4.5" />
-                        </div>
-                        <input
-                          type="text"
-                          value={regName}
-                          onChange={(e) => setRegName(e.target.value)}
-                          placeholder="Misal: Dra. Hj. Ratna Sari, M.Pd."
-                          className="w-full pl-11 pr-4 py-3.5 border border-slate-800 rounded-2xl bg-slate-900/60 outline-none focus:border-indigo-500 focus:bg-slate-900 focus:ring-4 focus:ring-indigo-500/10 text-slate-200 transition-all font-medium text-xs placeholder:text-slate-600"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Nomor WhatsApp Aktif</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <Phone className="w-4.5 h-4.5" />
-                        </div>
-                        <input
-                          type="text"
-                          value={regWa}
-                          onChange={(e) => setRegWa(e.target.value)}
-                          placeholder="Format: 0812XXXXXXXX atau 628XXXXXXXX"
-                          className="w-full pl-11 pr-4 py-3.5 border border-slate-800 rounded-2xl bg-slate-900/60 outline-none focus:border-indigo-500 focus:bg-slate-900 focus:ring-4 focus:ring-indigo-500/10 text-slate-200 transition-all font-mono text-xs placeholder:text-slate-600"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3.5 text-[10.5px] text-slate-400 leading-relaxed">
-                    💡 <strong>Status Akun:</strong> Token akses masuk akan diterbitkan otomatis setelah Admin menyetujui pendaftaran Anda di sistem. Silakan laporkan jika proses verifikasi belum selesai.
-                  </div>
-
-                  <button 
-                    onClick={handleRegister}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white font-extrabold py-4 px-6 rounded-2xl shadow-xl shadow-indigo-600/10 hover:shadow-indigo-500/20 active:scale-95 transition-all text-xs border border-indigo-500/30 mt-1"
-                  >
-                    Kirim Form Pendaftaran Akun
-                  </button>
-                </motion.div>
-              )}
-
-              {authMode === "admin" && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 15 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  className="space-y-4"
-                >
-                  {!isAdminUnlocked ? (
-                    <>
-                      <div className="space-y-1">
-                        <h2 className="text-md font-bold text-slate-200">Verifikasi Kunci Admin</h2>
-                        <p className="text-xs text-slate-400">Gunakan kunci akses pengelola utama untuk mengontrol pendaftaran user baru.</p>
-                      </div>
-
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                          <Lock className="w-4.5 h-4.5" />
-                        </div>
-                        <input
-                          type={showAdminPassword ? "text" : "password"}
-                          value={adminPassword}
-                          onChange={(e) => setAdminPassword(e.target.value)}
-                          placeholder="Masukkan sandi admin..."
-                          className="w-full pl-11 pr-11 py-3.5 border border-slate-800 rounded-2xl bg-slate-900/60 outline-none focus:border-amber-500 focus:bg-slate-900 focus:ring-4 focus:ring-amber-500/10 text-slate-200 transition-all text-xs font-mono placeholder:text-slate-600"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAdminPassword(!showAdminPassword)}
-                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
-                        >
-                          {showAdminPassword ? (
-                            <EyeOff className="w-4.5 h-4.5" />
-                          ) : (
-                            <Eye className="w-4.5 h-4.5" />
-                          )}
-                        </button>
-                      </div>
-
-                      <button 
-                        onClick={checkAdmin} 
-                        className="w-full bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-3.5 px-6 rounded-2xl text-xs transition"
-                      >
-                        Buka Panel Kontrol Admin
-                      </button>
-                    </>
-                  ) : (
-                    <div className="fixed inset-4 md:inset-12 bg-slate-950/95 backdrop-blur-3xl rounded-[2.5rem] p-6 md:p-10 shadow-3xl overflow-hidden z-[100] border border-slate-800 flex flex-col text-slate-200">
-                      <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-indigo-600 p-2 text-white rounded-xl">
-                            <Compass className="w-5 h-5 animate-spin-slow" />
-                          </div>
-                          <div>
-                            <h2 className="text-lg font-black text-slate-100">Panel Kontrol Utama Admin</h2>
-                            <p className="text-[11px] text-slate-400">Kelola persetujuan & generate token secara langsung</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => { setIsLoggedIn(true); storage.set("guru_token", "ADMIN_BYPASS"); }} 
-                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-indigo-500/20"
-                          >
-                            Masuk Workspace
-                          </button>
-                          <button 
-                            onClick={() => { setAdminUsers([]); setAuthMode("login"); setIsAdminUnlocked(false); }} 
-                            className="px-4 py-2 border border-slate-800 text-xs font-bold rounded-xl hover:bg-slate-900 text-slate-400 transition"
-                          >
-                            Tutup Portal Admin
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="overflow-auto flex-1 font-medium bg-slate-900/55 rounded-2xl border border-slate-800">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-slate-900 sticky top-0 border-b border-slate-800 uppercase text-[10px] font-bold text-slate-400 tracking-wider">
-                            <tr>
-                              <th className="p-4">Nama Lengkap & Gelar</th>
-                              <th className="p-4">No. WhatsApp</th>
-                              <th className="p-4">Status Akun</th>
-                              <th className="p-4">Token Masuk</th>
-                              <th className="p-4">Tindakan</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/80 text-slate-300">
-                            {adminUsers.map(u => (
-                              <tr key={u.id} className="hover:bg-slate-900/30 transition-colors">
-                                <td className="p-4 font-bold text-white">{u.name}</td>
-                                <td className="p-4 font-mono text-slate-400">{u.phone}</td>
-                                <td className="p-4">
-                                  <span className={`px-2.5 py-1 rounded-full text-[9px] uppercase font-black ${
-                                    u.status === 'pending' 
-                                      ? 'bg-amber-400/10 text-amber-400 border border-amber-400/20' 
-                                      : 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/20'
-                                  }`}>
-                                    {u.status}
-                                  </span>
-                                </td>
-                                <td className="p-4 font-mono text-blue-400 font-extrabold text-sm select-all tracking-wider">{u.token || "-"}</td>
-                                <td className="p-4">
-                                  {u.status === 'pending' ? (
-                                    <button 
-                                      onClick={() => approveUser(u.id)} 
-                                      className="bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white px-3.5 py-2 rounded-xl text-[10px] font-extrabold transition shadow-md shadow-emerald-500/10 active:scale-95"
-                                    >
-                                      Setujui & Buat Token
-                                    </button>
-                                  ) : (
-                                    <span className="text-slate-500 text-[10px] italic">Selesai terverifikasi</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Back to Login options if admin users not retrieved */}
-                  {!isAdminUnlocked && (
-                    <div className="text-center pt-2">
-                      <button 
-                        onClick={() => setAuthMode("login")} 
-                        className="text-xs text-slate-500 font-bold hover:text-slate-300 transition"
-                      >
-                        Batal & Kembali ke Login
-                      </button>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </div>
-
-            {/* Micro Credit Indicator */}
-            <div className="mt-6 text-center">
-              <span className="text-[10px] text-slate-600 font-mono">
-                Security Engine powered by Firebase Firestore
-              </span>
-            </div>
-
-          </div>
-
-        </div>
-      </div>
-    );
-  }
 
   const toggleMitra = (mitra: string) => {
     const current = specificData.mitra;
