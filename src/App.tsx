@@ -626,6 +626,7 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          geminiApiKey: settings.geminiApiKey,
           modelName: settings.aiModel || "gemini-2.5-flash"
         })
       });
@@ -1389,7 +1390,7 @@ export default function App() {
 
                 <div className="space-y-4">
                   <p className="text-slate-600 leading-relaxed text-[11px]">
-                    Sistem menggunakan AI terintegrasi untuk pembuatan administrasi ajar. Anda dapat menguji koneksi server AI di bawah ini.
+                    Sistem menggunakan AI terintegrasi untuk pembuatan administrasi ajar. Anda dapat memasukkan <strong>Kunci API Gemini (Gemini API Key)</strong> Anda sendiri di bawah ini, atau menggunakan koneksi bawaan server.
                   </p>
 
                   <div className="space-y-3.5">
@@ -1411,6 +1412,38 @@ export default function App() {
                     </div>
 
                     {/* API Key Input */}
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider flex justify-between items-center">
+                        <span>Gemini API Key (Kunci API Anda)</span>
+                        <a 
+                          href="https://aistudio.google.com/app/apikey" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-[9px] text-indigo-600 hover:underline normal-case font-bold"
+                        >
+                          Dapatkan API Key Gratis Di Sini &rarr;
+                        </a>
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="geminiApiKey"
+                          name="geminiApiKey"
+                          type="text"
+                          value={settings.geminiApiKey || ""}
+                          onChange={(e) => handleSettingsChange("geminiApiKey", e.target.value)}
+                          placeholder="Masukkan Kunci API Gemini Anda (AIzaSy...)"
+                          className="w-full p-3 pr-10 border border-slate-300 rounded-xl bg-slate-50 outline-none focus:border-indigo-500 focus:bg-white text-[11px] transition font-mono tracking-wide text-slate-800"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                          <Key className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        * Kunci API ini tersimpan aman di peramban (browser) perangkat lokal Anda.
+                      </p>
+                    </div>
+
+                    {/* Test Connection */}
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
                     <button
                       type="button"
