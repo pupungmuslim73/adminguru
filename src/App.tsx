@@ -619,11 +619,6 @@ export default function App() {
   };
 
   const handleTestApiKey = async () => {
-    const key = settings.geminiApiKey;
-    if (!key || key.trim() === "") {
-      showToast("Kunci API Gemini tidak boleh kosong untuk diuji.", true);
-      return;
-    }
     setIsTestingKey(true);
     setTestKeyStatus(null);
     try {
@@ -631,19 +626,18 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          geminiApiKey: key,
-          modelName: settings.aiModel || "gemini-3.5-flash"
+          modelName: settings.aiModel || "gemini-2.5-flash"
         })
       });
       const data = await safeParseJson(response);
       if (!response.ok) {
-        throw new Error(data.error || "Gagal memverifikasi API Key.");
+        throw new Error(data.error || "Gagal memverifikasi Koneksi Server.");
       }
-      setTestKeyStatus({ success: true, message: data.message || "Sukses, API Key Berfungsi!" });
-      showToast("Kunci API berhasil diverifikasi!", false);
+      setTestKeyStatus({ success: true, message: data.message || "Sukses, Koneksi Berfungsi!" });
+      showToast("Koneksi Server berhasil diverifikasi!", false);
     } catch (err: any) {
-      setTestKeyStatus({ success: false, message: err.message || "Kunci API tidak valid atau gagal terhubung." });
-      showToast("Pengujian Kunci API gagal.", true);
+      setTestKeyStatus({ success: false, message: err.message || "Koneksi tidak valid atau gagal terhubung." });
+      showToast("Pengujian Koneksi Server gagal.", true);
     } finally {
       setIsTestingKey(false);
     }
@@ -1395,7 +1389,7 @@ export default function App() {
 
                 <div className="space-y-4">
                   <p className="text-slate-600 leading-relaxed text-[11px]">
-                    Masukkan Kunci API Gemini Anda di bawah ini untuk digunakan pada seluruh menu pembuatan administrasi ajar. Kunci API akan tersimpan aman di peramban lokal perangkat Anda dan tidak akan dikirimkan ke server publik lain.
+                    Sistem menggunakan AI terintegrasi untuk pembuatan administrasi ajar. Anda dapat menguji koneksi server AI di bawah ini.
                   </p>
 
                   <div className="space-y-3.5">
@@ -1407,62 +1401,32 @@ export default function App() {
                       <select
                         id="aiModel"
                         name="aiModel"
-                        value={settings.aiModel || "gemini-3.5-flash"}
+                        value={settings.aiModel || "gemini-2.5-flash"}
                         onChange={(e) => handleSettingsChange("aiModel", e.target.value)}
                         className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 outline-none focus:border-blue-500 focus:bg-white text-[12px] font-semibold text-slate-700 transition"
                       >
-                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Sangat Direkomendasikan & Cepat)</option>
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Kualitas Konsisten)</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Sangat Direkomendasikan & Cepat)</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Kualitas Konsisten)</option>
                       </select>
                     </div>
 
                     {/* API Key Input */}
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider flex justify-between items-center">
-                        <span>Gemini API Key</span>
-                        <a 
-                          href="https://aistudio.google.com/app/apikey" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-[9px] text-indigo-600 hover:underline normal-case font-bold"
-                        >
-                          Dapatkan API Key Gratis Disini &rarr;
-                        </a>
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="geminiApiKey"
-                          name="geminiApiKey"
-                          type="text"
-                          value={settings.geminiApiKey || ""}
-                          onChange={(e) => handleSettingsChange("geminiApiKey", e.target.value)}
-                          placeholder="Masukkan AIzaSy... Kunci API Gemini Anda"
-                          className="w-full p-3 pr-10 border border-slate-300 rounded-xl bg-slate-50/50 outline-none focus:border-indigo-500 focus:bg-white text-[11px] transition font-mono tracking-wide"
-                        />
-                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                          <Key className="w-4 h-4 text-slate-400" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Test action & State notification */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
                     <button
                       type="button"
                       onClick={handleTestApiKey}
-                      disabled={isTestingKey || !(settings.geminiApiKey?.trim())}
+                      disabled={isTestingKey}
                       className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto shrink-0"
                     >
                       {isTestingKey ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-indigo-700/20 border-t-indigo-700 rounded-full animate-spin"></div>
-                          <span>Menguji API Key...</span>
+                          <span>Menguji Koneksi Server...</span>
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>Simpan & Uji Kunci API</span>
+                          <span>Uji Koneksi AI Server</span>
                         </>
                       )}
                     </button>
@@ -1478,7 +1442,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-
+                  </div>
                 </div>
 
               </div>

@@ -13,7 +13,7 @@ app.use(express.json({ limit: "15mb" }));
 function getGenAIWithKey(userApiKey?: string) {
   const apiKey = userApiKey?.trim() || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Kunci API Gemini tidak ditemukan. Silakan masukkan Kunci API Gemini Anda di form.");
+    throw new Error("Kunci API Gemini tidak ditemukan pada sistem. Hubungi administrator.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -586,9 +586,6 @@ Rancang cover ini agar tampak seperti satu halaman gambar sampul buku cetak berk
 app.post("/api/test-api-key", async (req, res) => {
   try {
     const { geminiApiKey, modelName } = req.body;
-    if (!geminiApiKey || geminiApiKey.trim() === "") {
-      return res.status(400).json({ error: "Kunci API tidak boleh kosong" });
-    }
     const testAi = getGenAIWithKey(geminiApiKey);
     const response = await testAi.models.generateContent({
       model: modelName || "gemini-2.5-flash",
@@ -598,11 +595,11 @@ app.post("/api/test-api-key", async (req, res) => {
     if (response && response.text) {
       return res.json({ success: true, message: "Sukses, API Key Berfungsi!" });
     } else {
-      return res.status(400).json({ error: "Respon kosong dari model. Silakan periksa kunci API Anda." });
+      return res.status(400).json({ error: "Respon kosong dari model. Silakan periksa pengaturan." });
     }
   } catch (err: any) {
     console.error("Kesalahan pengujian API Key:", err);
-    return res.status(400).json({ error: err.message || "Gagal memverifikasi API Key. Pastikan key benar dan aktif." });
+    return res.status(400).json({ error: err.message || "Gagal memverifikasi API. Pastikan sistem dikonfigurasi dengan benar." });
   }
 });
 
@@ -617,7 +614,7 @@ app.post("/api/suggest-elemen", async (req, res) => {
 
     const ai = getGenAIWithKey(geminiApiKey);
     const response = await ai.models.generateContent({
-      model: modelName || "gemini-3.5-flash",
+      model: modelName || "gemini-2.5-flash",
       contents: [
         {
           role: "user",
@@ -636,7 +633,7 @@ app.post("/api/suggest-elemen", async (req, res) => {
   } catch (err: any) {
     if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) {
       console.error(`[Gemini API] Quota Exceeded (429) on suggest-elemen`);
-      res.status(429).json({ error: "Batas kuota API habis. Silakan ganti Jenis Mesin Gemini di bawah." });
+      res.status(429).json({ error: "Batas kuota API habis. Silakan coba beberapa saat lagi." });
     } else {
       console.error("Kesalahan suggest elemen:", err.message);
       res.status(500).json({ error: err.message || "Gagal menghasilkan elemen CP." });
@@ -655,7 +652,7 @@ app.post("/api/suggest-materi-pokok", async (req, res) => {
 
     const ai = getGenAIWithKey(geminiApiKey);
     const response = await ai.models.generateContent({
-      model: modelName || "gemini-3.5-flash",
+      model: modelName || "gemini-2.5-flash",
       contents: [
         {
           role: "user",
@@ -673,7 +670,7 @@ app.post("/api/suggest-materi-pokok", async (req, res) => {
   } catch (err: any) {
     if (err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('quota')) {
       console.error(`[Gemini API] Quota Exceeded (429) on suggest-materi-pokok`);
-      res.status(429).json({ error: "Batas kuota API habis. Silakan ganti Jenis Mesin Gemini di bawah." });
+      res.status(429).json({ error: "Batas kuota API habis. Silakan coba beberapa saat lagi." });
     } else {
       console.error("Kesalahan suggest materi:", err.message);
       res.status(500).json({ error: err.message || "Gagal menghasilkan materi pokok." });
