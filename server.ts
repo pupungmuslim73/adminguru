@@ -8,12 +8,16 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "15mb" }));
 
+// JIKA ANDA INGIN MENULISKAN API KEY LANGSUNG DI DALAM KODE (MISAL UNTUK DEPLOY VERCEL):
+// Ganti string kosong di bawah ini dengan API Key Gemini Anda (contoh: "AIzaSy...")
+const HARDCODED_GEMINI_API_KEY = "AIzaSyCBNswQlq2ZE1eNMSWTBtEYkbpSeuH2B6M";
+
 // Initialize GenAI safely using process.env.GEMINI_API_KEY or user-provided key
 // User-Agent must be 'aistudio-build'
 function getGenAIWithKey(userApiKey?: string) {
-  const apiKey = userApiKey?.trim() || process.env.GEMINI_API_KEY;
+  const apiKey = userApiKey?.trim() || HARDCODED_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Kunci API Gemini tidak ditemukan pada sistem. Hubungi administrator.");
+    throw new Error("Kunci API Gemini tidak ditemukan pada sistem. Silakan masukkan Kunci API Gemini Anda di dalam kode (server.ts) atau di menu Pengaturan.");
   }
   return new GoogleGenAI({
     apiKey,
